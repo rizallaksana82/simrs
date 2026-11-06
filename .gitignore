@@ -1,0 +1,41 @@
+# Local
+.DS_Store
+*.local
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+
+# Editor
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Build output
+dist/
+build/
+.next/
+out/
+
+# Database dumps / local data
+*.dump
+*.sql.gz
+pgdata/

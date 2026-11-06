@@ -1,0 +1,79 @@
+name: CI — schema regression
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  schema:
+    name: schema.sql + regression tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: simrs_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d simrs_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-16
+          psql --version
+
+      - name: Wait for PostgreSQL
+        run: |
+          for i in $(seq 30); do
+            pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" && break
+            echo "menunggu postgres... ($i)"
+            sleep 2
+          done
+          pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER"
+
+      - name: Apply schema.sql
+        run: |
+          psql -d postgres -c "DROP DATABASE IF EXISTS simrs_test;"
+          psql -d postgres -c "CREATE DATABASE simrs_test;"
+          psql -v ON_ERROR_STOP=1 -d simrs_test -f schema.sql
+
+      - name: Run regression tests
+        run: psql -v ON_ERROR_STOP=1 -d simrs_test -f tests/schema_test.sql
+
+      - name: Verify schema is re-runnable on a fresh database
+        run: |
+          # schema.sql sengaja tidak idempotent (tanpa DROP TABLE) agar tidak
+          # menghapus data tak sengaja. Yang diuji: selalu bisa dipasang
+          # bersih dari database kosong.
+          psql -d postgres -c "DROP DATABASE IF EXISTS simrs_fresh;"
+          psql -d postgres -c "CREATE DATABASE simrs_fresh;"
+          psql -v ON_ERROR_STOP=1 -d simrs_fresh -f schema.sql
+          psql -d simrs_fresh -Atc "select count(*) from information_schema.tables where table_schema='public';"
